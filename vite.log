@@ -1,0 +1,37 @@
+
+> capacitor-app@1.0.0 dev
+> vite --host 127.0.0.1
+
+
+  VITE v5.4.21  ready in 140 ms
+
+  ➜  Local:   http://127.0.0.1:5173/
+12:12:21 PM [vite] hmr update /src/main.jsx
+12:12:21 PM [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+12:12:21 PM [vite] page reload src/main.jsx
+12:13:37 PM [vite] hmr update /src/main.jsx
+12:13:37 PM [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+12:13:37 PM [vite] page reload src/main.jsx
+12:14:47 PM [vite] hmr update /src/main.jsx
+12:14:47 PM [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+12:14:47 PM [vite] page reload src/main.jsx
+12:40:56 PM [vite] hmr update /src/main.jsx
+12:40:56 PM [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+12:40:56 PM [vite] page reload src/main.jsx
+12:42:26 PM [vite] hmr update /src/main.jsx
+12:42:26 PM [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+12:42:26 PM [vite] page reload src/main.jsx
+12:42:57 PM [vite] hmr update /src/main.jsx
+12:42:57 PM [vite] hmr invalidate /src/main.jsx Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+12:42:57 PM [vite] page reload src/main.jsx
+12:43:26 PM [vite] hmr update /src/main.jsx
+1:39:49 PM [vite] hmr update /src/main.jsx
+1:40:20 PM [vite] hmr update /src/main.jsx
+1:42:34 PM [vite] hmr update /src/main.jsx
+1:44:16 PM [vite] hmr update /src/main.jsx
+1:44:50 PM [vite] hmr update /src/main.jsx
+1:44:58 PM [vite] hmr update /src/main.jsx
+1:46:14 PM [vite] hmr update /src/main.jsx
+1:46:51 PM [vite] hmr update /src/main.jsx
+1:47:56 PM [vite] hmr update /src/main.jsx
+4:08:59 PM [vite] hmr update /src/main.jsx
