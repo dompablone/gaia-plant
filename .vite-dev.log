@@ -1,0 +1,98 @@
+
+> gaia-app@1.0.0 dev
+> vite --host 127.0.0.1 --port 5174 --strictPort
+
+
+  VITE v5.4.21  ready in 143 ms
+
+  ➜  Local:   http://127.0.0.1:5174/
+12:17:22 AM [vite] hmr update /src/App.jsx
+12:19:36 AM [vite] hmr update /src/App.jsx
+9:26:57 AM [vite] hmr update /src/App.jsx
+4:56:58 PM [vite] hmr update /src/App.jsx
+5:03:42 PM [vite] hmr update /src/App.jsx
+5:04:17 PM [vite] hmr update /src/App.jsx
+5:04:56 PM [vite] hmr update /src/App.jsx
+5:43:02 PM [vite] hmr update /src/App.jsx
+5:43:12 PM [vite] Internal server error: /Users/pablocarvalho/gaia-app/my-app/src/App.jsx: Unexpected token (2354:68)
+
+  2352 |         />
+  2353 |
+> 2354 |         <Route path="*" element={<Navigate to="/auth" replace />} />
+       |                                                                     ^
+  Plugin: vite:react-babel
+  File: /Users/pablocarvalho/gaia-app/my-app/src/App.jsx:2354:68
+  2352|          />
+  2353|  
+  2354|          <Route path="*" element={<Navigate to="/auth" replace />} />
+     |                                                                      ^
+      at constructor (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:367:19)
+      at JSXParserMixin.raise (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:6624:19)
+      at JSXParserMixin.unexpected (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:6644:16)
+      at JSXParserMixin.jsxParseElementAt (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:4745:18)
+      at JSXParserMixin.jsxParseElementAt (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:4727:32)
+      at JSXParserMixin.jsxParseElement (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:4778:17)
+      at JSXParserMixin.parseExprAtom (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:4788:19)
+      at JSXParserMixin.parseExprSubscripts (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11145:23)
+      at JSXParserMixin.parseUpdate (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11130:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11110:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10963:61)
+      at JSXParserMixin.parseExprOps (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10968:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10945:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10895:21)
+      at /Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10864:39
+      at JSXParserMixin.allowInAnd (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12500:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10864:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12567:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11747:28)
+      at JSXParserMixin.parseExprAtom (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11395:23)
+      at JSXParserMixin.parseExprAtom (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:4793:20)
+      at JSXParserMixin.parseExprSubscripts (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11145:23)
+      at JSXParserMixin.parseUpdate (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11130:21)
+      at JSXParserMixin.parseMaybeUnary (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:11110:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10963:61)
+      at JSXParserMixin.parseExprOps (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10968:23)
+      at JSXParserMixin.parseMaybeConditional (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10945:23)
+      at JSXParserMixin.parseMaybeAssign (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10895:21)
+      at JSXParserMixin.parseExpressionBase (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10848:23)
+      at /Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10844:39
+      at JSXParserMixin.allowInAnd (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12495:16)
+      at JSXParserMixin.parseExpression (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:10844:17)
+      at JSXParserMixin.parseReturnStatement (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13218:28)
+      at JSXParserMixin.parseStatementContent (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12874:21)
+      at JSXParserMixin.parseStatementLike (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12843:17)
+      at JSXParserMixin.parseStatementListItem (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12823:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13392:61)
+      at JSXParserMixin.parseBlockBody (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13385:10)
+      at JSXParserMixin.parseBlock (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13373:10)
+      at JSXParserMixin.parseFunctionBody (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12174:24)
+      at JSXParserMixin.parseFunctionBodyAndFinish (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12160:10)
+      at /Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13521:12
+      at JSXParserMixin.withSmartMixTopicForbiddingContext (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12477:14)
+      at JSXParserMixin.parseFunction (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13520:10)
+      at JSXParserMixin.parseExportDefaultExpression (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13983:19)
+      at JSXParserMixin.parseExport (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13904:25)
+      at JSXParserMixin.parseStatementContent (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12954:27)
+      at JSXParserMixin.parseStatementLike (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12843:17)
+      at JSXParserMixin.parseModuleItem (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:12820:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (/Users/pablocarvalho/gaia-app/my-app/node_modules/@babel/parser/lib/index.js:13392:36)
+5:48:45 PM [vite] hmr update /src/App.jsx
+5:50:03 PM [vite] hmr update /src/App.jsx
+5:52:23 PM [vite] hmr update /src/App.jsx
+5:54:31 PM [vite] hmr update /src/App.jsx
+5:55:27 PM [vite] hmr update /src/App.jsx
+6:27:00 PM [vite] hmr update /src/App.jsx
+6:27:47 PM [vite] hmr update /src/App.jsx
+6:33:09 PM [vite] hmr update /src/App.jsx
+6:33:25 PM [vite] hmr update /src/App.jsx
+6:33:47 PM [vite] hmr update /src/App.jsx
+6:33:58 PM [vite] hmr update /src/App.jsx
+6:34:15 PM [vite] hmr update /src/App.jsx
+6:34:37 PM [vite] hmr update /src/App.jsx
+6:34:51 PM [vite] hmr update /src/App.jsx
+6:40:25 PM [vite] hmr update /src/App.jsx
+6:40:44 PM [vite] hmr update /src/App.jsx
+6:41:34 PM [vite] hmr update /src/App.jsx
+6:41:57 PM [vite] hmr update /src/App.jsx
+6:42:34 PM [vite] hmr update /src/App.jsx
+6:47:38 PM [vite] hmr update /src/App.jsx
