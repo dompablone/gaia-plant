@@ -4,7 +4,7 @@ import { Routes, Route, Navigate, Link, useNavigate, Outlet } from "react-router
 
 import { supabase } from "./lib/supabase.js";
 import gaiaIcon from "./assets/gaia-icon.png";
-import Layout from "./components/Layout.jsx";
+import Layout from "./components/Layout";
  
 
 // -------------------- Admin auth (server-side via Supabase table) --------------------
@@ -2524,13 +2524,75 @@ function RequireProfileComplete({ session, profile, loadingProfile, profileError
   return children;
 }
 
+function ProtectedRoute({ session, children }) {
+  if (!session?.user) return <Navigate to="/auth" replace />;
+  return children;
+}
+
+function OutraPagina() {
+  return <div style={{ padding: 20 }}>Outra pagina</div>;
+}
+
 // -------------------- App (carrega session/profile + rotas) --------------------
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [profile] = useState(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    let unsub = null;
+
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        setSession(data?.session ?? null);
+      } catch {
+        setSession(null);
+      }
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+
+    unsub = sub?.subscription;
+
+    return () => {
+      unsub?.unsubscribe?.();
+    };
+  }, []);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    } finally {
+      setSession(null);
+      setSigningOut(false);
+    }
+  }
+
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Gaia Plant</h1>
-      <p>App funcionando novamente</p>
-    </div>
+    <Routes>
+      <Route
+        path="/app"
+        element={
+          <ProtectedRoute session={session}>
+            <Layout
+              session={session}
+              onSignOut={handleSignOut}
+              signingOut={signingOut}
+            />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<AppDashboard session={session} profile={profile} />} />
+        <Route path="pagamentos" element={<Pagamentos />} />
+        <Route path="outra-rota" element={<OutraPagina />} />
+      </Route>
+    </Routes>
   );
 }
 
