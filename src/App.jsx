@@ -1,9 +1,11 @@
 // src/App.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, Link, useNavigate, Outlet } from "react-router-dom";
 
 import { supabase } from "./lib/supabase.js";
 import gaiaIcon from "./assets/gaia-icon.png";
+import Layout from "./components/Layout.jsx";
+ 
 
 // -------------------- Admin auth (server-side via Supabase table) --------------------
 // Fallback temporário: enquanto a tabela/políticas não existirem, mantém seu e-mail como admin
@@ -59,7 +61,9 @@ function isProfileComplete(p) {
 }
 
 function getNextRoute(profile) {
-  if (!profile) return "/auth";
+  // Se não existe linha em `profiles` ainda, o próximo passo é criar o perfil clínico.
+  // Retornar "/auth" aqui gera loop infinito: /start -> /auth -> /start...
+  if (!profile) return "/perfil-clinico";
   if (!isPersonalComplete(profile)) return "/perfil-clinico";
   if (!isWizardComplete(profile)) return "/wizard";
   if (!hasConditionsSelected(profile)) return "/patologias";
@@ -286,6 +290,14 @@ function Shell({ session, children, onSignOut, signingOut }) {
   );
 }
 
+function AppLayout({ session, signingOut, onSignOut }) {
+  return (
+    <Shell session={session} signingOut={signingOut} onSignOut={onSignOut}>
+      <Outlet />
+    </Shell>
+  );
+}
+
 function Card({ children }) {
   return <div style={styles.card}>{children}</div>;
 }
@@ -360,21 +372,23 @@ function SelectButton({ active, title, subtitle, onClick }) {
 // -------------------- Auth Pages --------------------
 function Welcome() {
   return (
-    <Card>
-      <h1 style={{ margin: 0, fontSize: 34 }}>Bem-vindo à Gaia Plant</h1>
-      <p style={{ opacity: 0.75, marginTop: 10 }}>
-        Faça login ou crie uma conta para continuar.
-      </p>
+    <div className="min-h-screen bg-emerald-50 flex items-center justify-center px-4">
+      <UiCard className="w-full max-w-xl">
+        <UiCardHeader>
+          <UiCardTitle>Bem-vindo à Gaia Plant</UiCardTitle>
+          <p className="mt-1 text-sm text-slate-500">Faça login ou crie uma conta para continuar.</p>
+        </UiCardHeader>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 18, flexWrap: "wrap" }}>
-        <Link to="/criar-conta" style={{ ...styles.btn, textDecoration: "none", display: "inline-block" }}>
-          Criar conta
-        </Link>
-        <Link to="/login" style={{ ...styles.btnGhost, textDecoration: "none", display: "inline-block" }}>
-          Já tenho conta (Login)
-        </Link>
-      </div>
-    </Card>
+        <UiCardContent className="flex gap-3">
+          <Link to="/criar-conta">
+            <Button> Criar conta </Button>
+          </Link>
+          <Link to="/login">
+            <Button variant="outline"> Já tenho conta </Button>
+          </Link>
+        </UiCardContent>
+      </UiCard>
+    </div>
   );
 }
 
@@ -2512,380 +2526,11 @@ function RequireProfileComplete({ session, profile, loadingProfile, profileError
 
 // -------------------- App (carrega session/profile + rotas) --------------------
 export default function App() {
-  const nav = useNavigate();
-  const [authChecked, setAuthChecked] = useState(false);
-
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-
-  const [loadingProfile, setLoadingProfile] = useState(false);
-  const [profileError, setProfileError] = useState(null);
-
-  const [isAdminFlag, setIsAdminFlag] = useState(false);
-  const [loadingAdmin, setLoadingAdmin] = useState(false);
-
-  // evita corrida de requests quando auth muda
-  const fetchSeqRef = useRef(0);
-  const [signingOut, setSigningOut] = useState(false);
-
-  async function loadProfile(userId) {
-    const seq = ++fetchSeqRef.current;
-
-    setLoadingProfile(true);
-    setProfileError(null);
-
-    try {
-      // 2 tentativas, com timeout de 12s cada
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        if (fetchSeqRef.current !== seq) return; // cancelado por outro fetch
-
-        try {
-          const query = supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-          const { data, error } = await withTimeout(query, 12000, "Supabase timeout ao buscar perfil");
-
-          if (error) throw error;
-
-          // só atualiza se ainda for o fetch atual
-          if (fetchSeqRef.current === seq) {
-            setProfile(data || null);
-            setLoadingProfile(false);
-          }
-          return;
-        } catch (err) {
-          const msg = String(err?.message || err);
-          const isTimeoutOrNetwork =
-            msg.toLowerCase().includes("timeout") ||
-            msg.toLowerCase().includes("failed to fetch") ||
-            msg.toLowerCase().includes("network");
-
-          if (!isTimeoutOrNetwork || attempt === 2) throw err;
-
-          // backoff leve antes da segunda tentativa
-          await sleep(600);
-        }
-      }
-    } catch (err) {
-      if (fetchSeqRef.current !== seq) return;
-
-      setProfile(null);
-      setProfileError(err?.message || "Não consegui carregar seu perfil");
-      setLoadingProfile(false);
-    }
-  }
-
-  async function loadAdminFor(userId, sess) {
-    setLoadingAdmin(true);
-    try {
-      const ok = await fetchIsAdmin(userId, sess);
-      setIsAdminFlag(Boolean(ok));
-    } catch {
-      setIsAdminFlag(false);
-    } finally {
-      setLoadingAdmin(false);
-    }
-  }
-
-  useEffect(() => {
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      // se não tem sessão, garante estado limpo
-      fetchSeqRef.current++;
-      setProfile(null);
-      setProfileError(null);
-      setLoadingProfile(false);
-      return;
-    }
-
-    loadProfile(userId);
-    // IMPORTANTE: dependências só de userId (não coloca profile aqui)
-  }, [session?.user?.id]);
-
-  useEffect(() => {
-    let unsub = null;
-
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        const sess = data?.session ?? null;
-        setSession(sess);
-        setAuthChecked(true);
-
-        if (sess?.user?.id) {
-          await loadAdminFor(sess.user.id, sess);
-        } else {
-          setIsAdminFlag(false);
-        }
-      } catch (err) {
-        setSession(null);
-        setIsAdminFlag(false);
-        setAuthChecked(true);
-      }
-    })();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      setAuthChecked(true);
-      setSession(newSession);
-
-      if (_event === "INITIAL_SESSION") {
-        // Já tratamos a sessão no getSession() acima
-        return;
-      }
-
-      const newUserId = newSession?.user?.id || null;
-
-      if (newUserId) {
-        await loadAdminFor(newUserId, newSession);
-      } else {
-        fetchSeqRef.current++;
-        setIsAdminFlag(false);
-      }
-    });
-
-    unsub = sub?.subscription;
-
-    return () => {
-      fetchSeqRef.current++;
-      unsub?.unsubscribe?.();
-    };
-  }, []);
-
-  async function handleSignOut() {
-    const seq = ++fetchSeqRef.current; // cancela qualquer fetch em andamento
-
-    setSigningOut(true);
-
-    try {
-      // Sign out from Supabase (local session)
-      await supabase.auth.signOut();
-    } catch (e) {
-      // Mesmo com falha de rede, vamos limpar o estado local
-    } finally {
-      // se outro signout/fetch começou, não precisa insistir
-      if (fetchSeqRef.current !== seq) return;
-
-      setSession(null);
-      setProfile(null);
-      setProfileError(null);
-      setLoadingProfile(false);
-      setIsAdminFlag(false);
-      setSigningOut(false);
-
-      nav("/auth", { replace: true });
-    }
-  }
-
-  if (!authChecked) {
-    return (
-      <div style={styles.page}>
-        <div style={{ maxWidth: 920, margin: "0 auto", padding: "60px 16px" }}>
-          <div style={{ ...styles.card, textAlign: "center" }}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Carregando sessão…</div>
-            <div style={{ marginTop: 10, opacity: 0.75 }}>Aguarde um instante.</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session?.user) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/auth" replace />} />
-            <Route path="/auth" element={<Welcome />} />
-            <Route path="/criar-conta" element={<Signup />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="*" element={<Navigate to="/auth" replace />} />
-          </Routes>
-        </div>
-      </div>
-    );
-  }
-
-  if (loadingProfile) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <Card>Carregando...</Card>
-        </div>
-      </div>
-    );
-  }
-
-  if (profileError) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <Card>
-            <h3 style={{ marginTop: 0 }}>Não consegui carregar seu perfil</h3>
-            <p style={{ opacity: 0.8 }}>{String(profileError?.message || profileError)}</p>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button type="button" style={styles.btn} onClick={() => loadProfile(session.user.id)}>
-                Tentar novamente
-              </button>
-              <button type="button" style={styles.btnGhost} onClick={() => nav("/auth", { replace: true })}>
-                Ir para login
-              </button>
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <Shell session={session} onSignOut={handleSignOut} signingOut={signingOut}>
-      <Routes>
-        <Route path="/" element={<Navigate to="/auth" replace />} />
-
-        <Route path="/auth" element={session?.user ? <Navigate to="/start" replace /> : <Welcome />} />
-        <Route path="/criar-conta" element={session?.user ? <Navigate to="/start" replace /> : <Signup />} />
-        <Route path="/login" element={session?.user ? <Navigate to="/start" replace /> : <Login />} />
-
-        <Route
-          path="/start"
-          element={
-            <RequireAuth session={session}>
-              <ProfileGate session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError} />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/perfil-clinico"
-          element={
-            <RequireAuth session={session}>
-              <ClinicalProfile session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/wizard"
-          element={
-            <RequireBasicProfile session={session} profile={profile}>
-              <Wizard session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireBasicProfile>
-          }
-        />
-
-        <Route
-          path="/patologias"
-          element={
-            <RequireAuth session={session}>
-              <Patologias session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/app"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <AppDashboard session={session} profile={profile} />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/objetivos"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <AppHome session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireProfileComplete>
-          }
-        />
-        <Route
-          path="/app/produtos"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <Produtos />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/pagamentos"
-          element={
-            <RequireProfileComplete
-              session={session}
-              profile={profile}
-              loadingProfile={loadingProfile}
-              profileError={profileError}
-            >
-              <Pagamentos />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/saude"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <HealthTriage session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/emocional"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <EmotionalTriage session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/emocional/sintomas"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <EmotionalSymptoms session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/conteudos"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <Conteudos session={session} isAdmin={isAdminFlag} />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/medicos"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <Medicos />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/perfil"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <Perfil session={session} profile={profile} onProfileSaved={setProfile} />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route
-          path="/app/historico"
-          element={
-            <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
-              <Historico profile={profile} />
-            </RequireProfileComplete>
-          }
-        />
-
-        <Route path="*" element={<Navigate to={session?.user ? "/start" : "/auth"} replace />} />
-      </Routes>
-    </Shell>
+    <div style={{ padding: 20 }}>
+      <h1>Gaia Plant</h1>
+      <p>App funcionando novamente</p>
+    </div>
   );
 }
 
