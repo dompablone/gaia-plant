@@ -4,7 +4,7 @@ import { Routes, Route, Navigate, Link, useNavigate, Outlet } from "react-router
 
 import { supabase } from "./lib/supabase.js";
 import gaiaIcon from "./assets/gaia-icon.png";
-import Layout from "./components/Layout";
+import Layout from "./components/Layout.jsx";
  
 
 // -------------------- Admin auth (server-side via Supabase table) --------------------
@@ -2524,19 +2524,10 @@ function RequireProfileComplete({ session, profile, loadingProfile, profileError
   return children;
 }
 
-function ProtectedRoute({ session, children }) {
-  if (!session?.user) return <Navigate to="/auth" replace />;
-  return children;
-}
-
-function OutraPagina() {
-  return <div style={{ padding: 20 }}>Outra pagina</div>;
-}
-
 // -------------------- App (carrega session/profile + rotas) --------------------
 export default function App() {
   const [session, setSession] = useState(null);
-  const [profile] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -2576,6 +2567,9 @@ export default function App() {
 
   return (
     <Routes>
+      {/* rota raiz */}
+      <Route path="/" element={<Navigate to="/app" replace />} />
+
       <Route
         path="/app"
         element={
