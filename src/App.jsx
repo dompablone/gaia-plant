@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
 
 import { supabase } from "./lib/supabase.js";
+import gaiaIcon from "./assets/gaia-icon.png";
 
 // -------------------- Admin auth (server-side via Supabase table) --------------------
 // Fallback temporário: enquanto a tabela/políticas não existirem, mantém seu e-mail como admin
@@ -58,7 +59,7 @@ function isProfileComplete(p) {
 }
 
 function getNextRoute(profile) {
-  if (!profile) return "/perfil-clinico";
+  if (!profile) return "/auth";
   if (!isPersonalComplete(profile)) return "/perfil-clinico";
   if (!isWizardComplete(profile)) return "/wizard";
   if (!hasConditionsSelected(profile)) return "/patologias";
@@ -67,11 +68,31 @@ function getNextRoute(profile) {
 
 
 // -------------------- Helpers --------------------
-function withTimeout(promise, ms, label = "Timeout") {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
-  ]);
+// -------------------- Telemetria (controlada) --------------------
+const __warnOnce = new Map();
+function logWarn(key, details) {
+  // evita spam: 1 log por chave a cada 30s
+  const now = Date.now();
+  const last = __warnOnce.get(key) || 0;
+  if (now - last < 30000) return;
+  __warnOnce.set(key, now);
+  console.warn(`[GAIA] ${key}`, details || "");
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function withTimeout(promise, ms, msg = "Timeout") {
+  let t;
+  const timeout = new Promise((_, rej) => {
+    t = setTimeout(() => rej(new Error(msg)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 // normaliza objetos de triagem (aceita boolean legado)
@@ -86,21 +107,82 @@ function normalizeTriage(raw) {
 }
 
 async function fetchMyProfile(userId) {
-  // 2 tentativas em caso de timeout intermitente
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const cacheKey = userId ? `gaia.profile.cache:${userId}` : "gaia.profile.cache:anon";
+
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const query = supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-      const { data, error } = await withTimeout(query, 20000, "Supabase timeout ao buscar perfil");
+      const query = supabase
+        .from("profiles")
+        .select(
+          [
+            "id",
+            "email",
+            "full_name",
+            "phone",
+            "cpf",
+            "birth_date",
+            "age_range",
+            "used_cannabis",
+            "main_reason",
+            "has_doctor",
+            "main_goal",
+            "share_data",
+            "tipo",
+            "direcionamento",
+            "liberacao",
+            "health_triage",
+            "emotional_triage",
+            "onboarding_answers",
+            "onboarding_completed",
+            "created_at",
+            "updated_at",
+          ].join(",")
+        )
+        .eq("id", userId)
+        .maybeSingle();
+
+      const { data, error } = await withTimeout(query, 45000, "Supabase timeout ao buscar perfil");
+
       if (error) throw error;
-      return data ?? null;
+
+      const normalized = data
+        ? {
+            ...data,
+            health_triage: normalizeTriage(data.health_triage),
+            emotional_triage: normalizeTriage(data.emotional_triage),
+          }
+        : null;
+
+      if (normalized) {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(normalized));
+        } catch {}
+      }
+
+      return normalized;
     } catch (err) {
-      const msg = String(err?.message || err);
-      const isTimeout = msg.toLowerCase().includes("timeout");
-      if (!isTimeout || attempt === 1) throw err;
-      // pequena espera antes de tentar de novo
-      await new Promise((r) => setTimeout(r, 400));
+      const msg = String(err?.message || err).toLowerCase();
+      if (msg.includes("timeout")) {
+        logWarn("profile_fetch_timeout", { userId, attempt });
+      }
+      const isNetwork = msg.includes("timeout") || msg.includes("failed to fetch") || msg.includes("network");
+      if (!isNetwork) {
+        logWarn("profile_fetch_error", { userId, attempt, message: String(err?.message || err) });
+      }
+
+      if (isNetwork && attempt === 0) {
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) return JSON.parse(cached);
+        } catch {}
+      }
+
+      if (!isNetwork || attempt === 2) throw err;
+
+      await new Promise((r) => setTimeout(r, 500 + attempt * 800));
     }
   }
+
   return null;
 }
 
@@ -119,7 +201,13 @@ async function upsertMyProfile(userId, patch) {
       return data ?? null;
     } catch (err) {
       const msg = String(err?.message || err);
+      if (msg.toLowerCase().includes("timeout")) {
+        logWarn("profile_save_timeout", { userId, attempt });
+      }
       const isTimeout = msg.toLowerCase().includes("timeout");
+      if (isTimeout) {
+        logWarn("profile_upsert_timeout", { userId, attempt });
+      }
       if (!isTimeout || attempt === 1) throw err;
       await new Promise((r) => setTimeout(r, 400));
     }
@@ -129,13 +217,23 @@ async function upsertMyProfile(userId, patch) {
 
 // -------------------- UI Base --------------------
 function Header({ userEmail, onSignOut, signingOut }) {
+  const nav = useNavigate();
+
   return (
     <div style={styles.topbar}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={styles.logoDot} />
+      <div style={styles.appHeader} onClick={() => nav("/")}>
+        <img
+          src={gaiaIcon}
+          alt="Gaia Plant"
+          style={{
+            width: 88,
+            height: 88,
+            marginRight: 12,
+          }}
+        />
         <div>
-          <div style={{ fontWeight: 800 }}>Gaia Plant — Cannabis Medicinal</div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>Saúde & bem-estar (beta)</div>
+          <div style={styles.appTitle}>Gaia Plant</div>
+          <div style={styles.appSubtitle}>Cannabis Medicinal</div>
         </div>
       </div>
 
@@ -143,6 +241,23 @@ function Header({ userEmail, onSignOut, signingOut }) {
         {userEmail ? (
           <>
             <span style={{ fontSize: 12, opacity: 0.75 }}>{userEmail}</span>
+            <Link
+              to="/app/pagamentos"
+              style={{
+                ...styles.btnGhost,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 44,
+                height: 36,
+                borderRadius: 999,
+              }}
+              aria-label="Abrir pagamentos"
+              title="Pagamentos"
+            >
+              🛒
+            </Link>
             <button
               type="button"
               onClick={onSignOut}
@@ -173,6 +288,47 @@ function Shell({ session, children, onSignOut, signingOut }) {
 
 function Card({ children }) {
   return <div style={styles.card}>{children}</div>;
+}
+
+function GlobalLoading({ title = "Carregando…", subtitle = "", onRetry, onGoLogin }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const isSlow = elapsed >= 10;
+
+  return (
+    <Card>
+      <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>{title}</div>
+      <div style={{ opacity: 0.75, fontSize: 13 }}>
+        {subtitle ||
+          (isSlow
+            ? "Está demorando mais que o normal. Pode ser instabilidade de rede."
+            : "Aguarde um instante…")}
+      </div>
+
+      {isSlow ? (
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          {onRetry ? (
+            <button type="button" style={styles.btn} onClick={onRetry}>
+              Tentar novamente
+            </button>
+          ) : null}
+
+          {onGoLogin ? (
+            <button type="button" style={styles.btnGhost} onClick={onGoLogin}>
+              Ir para login
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 10, opacity: 0.6, fontSize: 12 }}>Tempo: {elapsed}s</div>
+    </Card>
+  );
 }
 
 function Field({ label, children }) {
@@ -313,30 +469,76 @@ function Login() {
   );
 }
 
-// -------------------- Gate /start --------------------
-function StartGate({ profile, loadingProfile, profileError }) {
+// -------------------- Gate /start (ProfileGate isolado) --------------------
+function ProfileGate({ session, profile, loadingProfile, profileError }) {
   const nav = useNavigate();
 
   useEffect(() => {
     if (loadingProfile) return;
 
+    // Sem sessão: manda para auth
+    if (!session?.user) {
+      nav("/auth", { replace: true });
+      return;
+    }
+
     if (profileError) {
-      nav("/perfil-clinico", { replace: true });
+      // OFFLINE OK: tenta usar o cache local do último perfil salvo
+      try {
+        const uid = session?.user?.id;
+        if (uid) {
+          const cacheKey = `gaia.profile.cache:${uid}`;
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const cachedProfile = JSON.parse(cached);
+            logWarn("profile_gate_offline_cache", { uid });
+            nav(getNextRoute(cachedProfile), { replace: true });
+            return;
+          }
+        }
+      } catch (e) {
+        // se o cache estiver inválido, apenas cai para a UI de erro abaixo
+        logWarn("profile_gate_cache_parse_error", { message: String(e?.message || e) });
+      }
+
+      // Não redireciona automaticamente para /auth.
+      // Mantém a tela de erro com botões (Tentar novamente / Ir para login).
+      logWarn("profile_gate_error", { message: String(profileError?.message || profileError) });
       return;
     }
 
     nav(getNextRoute(profile), { replace: true });
-  }, [profile, loadingProfile, profileError, nav]);
+  }, [session, profile, loadingProfile, profileError, nav]);
+
+  if (loadingProfile) {
+    return (
+      <GlobalLoading
+        title="Carregando seu perfil…"
+        subtitle="Estamos sincronizando seus dados com o Supabase."
+        onRetry={() => window.location.reload()}
+        onGoLogin={() => nav("/auth", { replace: true })}
+      />
+    );
+  }
+
+  if (profileError) {
+    return (
+      <GlobalLoading
+        title="Não foi possível carregar"
+        subtitle={String(profileError?.message || profileError)}
+        onRetry={() => window.location.reload()}
+        onGoLogin={() => nav("/auth", { replace: true })}
+      />
+    );
+  }
 
   return (
-    <Card>
-      <div style={{ opacity: 0.75 }}>Carregando próximo passo...</div>
-      {profileError ? (
-        <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>
-          {String(profileError?.message || profileError)}
-        </div>
-      ) : null}
-    </Card>
+    <GlobalLoading
+      title="Preparando…"
+      subtitle="Redirecionando para o próximo passo."
+      onRetry={() => window.location.reload()}
+      onGoLogin={() => nav("/auth", { replace: true })}
+    />
   );
 }
 
@@ -389,8 +591,10 @@ function ClinicalProfile({ session, profile, onProfileSaved }) {
     try {
       const patch = {
         full_name: fullName.trim(),
-        phone: phone.trim(),
-        cpf: cpf.trim(),
+        phone: String(phone || "")
+          .replace(/[^0-9+\s()-]/g, "")
+          .trim(),
+        cpf: String(cpf || "").replace(/\D/g, "").trim(),
         birth_date: birthDate.trim(),
       };
       const fresh = await upsertMyProfile(userId, patch);
@@ -773,13 +977,95 @@ function Conteudos({ session, isAdmin }) {
 }
 
 function Produtos() {
+  const nav = useNavigate();
+
   return (
-    <Card>
-      <h2 style={{ marginTop: 0 }}>Produtos</h2>
-      <p style={{ opacity: 0.75 }}>
-        Catálogo de produtos e checkout (placeholder). Em breve: integração de pagamento.
-      </p>
-    </Card>
+    <div style={{ display: "grid", gap: 16 }}>
+      <Card>
+        <h2 style={{ marginTop: 0 }}>Produtos</h2>
+        <p style={{ opacity: 0.75, marginTop: 6 }}>
+          Aqui vai o catálogo (MVP). Checkout em breve.
+        </p>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+          <button type="button" style={styles.btnGhost} onClick={() => nav("/app", { replace: true })}>
+            Voltar
+          </button>
+          <button type="button" style={styles.btn} onClick={() => nav("/app/pagamentos", { replace: true })}>
+            Configurar pagamento
+          </button>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0 }}>Destaques</h3>
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          {[
+            { title: "E-book: Introdução à Cannabis Medicinal", desc: "PDF • download" },
+            { title: "Consulta guiada (MVP)", desc: "Serviço • agendamento" },
+            { title: "Kit inicial (MVP)", desc: "Produto • em breve" },
+          ].map((p) => (
+            <div
+              key={p.title}
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                border: "1px solid rgba(0,0,0,0.12)",
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>{p.title}</div>
+              <div style={{ opacity: 0.75, marginTop: 6 }}>{p.desc}</div>
+              <button
+                type="button"
+                style={{ ...styles.btn, marginTop: 12 }}
+                onClick={() => nav("/app/pagamentos", { replace: true })}
+              >
+                Ver opções
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Pagamentos() {
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Card>
+        <h2 style={{ marginTop: 0 }}>Pagamentos</h2>
+        <p style={{ opacity: 0.75, marginTop: 6 }}>
+          Checkout (placeholder). Aqui vamos integrar Pix, cartão e Mercado Pago.
+        </p>
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0 }}>Opções</h3>
+
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          <div style={{ padding: 14, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff" }}>
+            <div style={{ fontWeight: 900 }}>Pix</div>
+            <div style={{ opacity: 0.75, marginTop: 6 }}>QR Code / Copia e cola (em breve)</div>
+          </div>
+
+          <div style={{ padding: 14, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff" }}>
+            <div style={{ fontWeight: 900 }}>Cartão</div>
+            <div style={{ opacity: 0.75, marginTop: 6 }}>Crédito / Débito (em breve)</div>
+          </div>
+
+          <div style={{ padding: 14, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff" }}>
+            <div style={{ fontWeight: 900 }}>Mercado Pago</div>
+            <div style={{ opacity: 0.75, marginTop: 6 }}>Link de pagamento / Checkout Pro (em breve)</div>
+          </div>
+        </div>
+
+        <p style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>
+          Para a demo, essa página é a vitrine do fluxo. Depois ligamos no backend.
+        </p>
+      </Card>
+    </div>
   );
 }
 
@@ -1281,20 +1567,127 @@ function Perfil({ session, profile, onProfileSaved }) {
 }
 
 function Historico({ profile }) {
+  const nav = useNavigate();
+
   const health = normalizeTriage(profile?.health_triage);
   const emo = normalizeTriage(profile?.emotional_triage);
 
+  // Produtos (MVP): lemos de onboarding_answers.products para não depender de novas colunas
+  const products = profile?.onboarding_answers?.products || {};
+  const favorites = Array.isArray(products.favorites) ? products.favorites : [];
+  const purchased = Array.isArray(products.purchased) ? products.purchased : [];
+
+  function renderTriageSection(title, triageObj) {
+    const entries = Object.entries(triageObj || {}).filter(([, v]) => Boolean(v?.on));
+
+    return (
+      <div style={{ marginTop: 14 }}>
+        <h3 style={{ marginBottom: 8 }}>{title}</h3>
+
+        {entries.length === 0 ? (
+          <div style={{ opacity: 0.75, fontSize: 13 }}>
+            Nenhuma resposta marcada aqui ainda.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {entries.map(([key, v]) => (
+              <div
+                key={key}
+                style={{
+                  padding: 14,
+                  borderRadius: 14,
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  background: "#fff",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                  <div style={{ fontWeight: 900 }}>{key.replace(/_/g, " ")}</div>
+                  <div
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      background: "#43a047",
+                      color: "#fff",
+                    }}
+                  >
+                    ATIVO
+                  </div>
+                </div>
+
+                {String(v?.note || "").trim() ? (
+                  <div style={{ marginTop: 8, opacity: 0.8 }}>{v.note}</div>
+                ) : (
+                  <div style={{ marginTop: 8, opacity: 0.6, fontSize: 13 }}>Sem detalhes adicionais.</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <Card>
-      <h2 style={{ marginTop: 0 }}>Meu histórico</h2>
-      <p style={{ opacity: 0.75 }}>Resumo do que você respondeu.</p>
+    <div style={{ display: "grid", gap: 16 }}>
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ marginTop: 0, marginBottom: 6 }}>Meu histórico</h2>
+            <p style={{ opacity: 0.75, margin: 0 }}>Resumo do que você respondeu.</p>
+          </div>
+          <button type="button" style={styles.btnGhost} onClick={() => nav("/app", { replace: true })}>
+            Voltar
+          </button>
+        </div>
+      </Card>
 
-      <h3 style={{ marginBottom: 6 }}>Saúde</h3>
-      <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, opacity: 0.85 }}>{JSON.stringify(health, null, 2)}</pre>
+      <Card>
+        {renderTriageSection("Saúde", health)}
+        {renderTriageSection("Emocional", emo)}
+      </Card>
 
-      <h3 style={{ marginBottom: 6, marginTop: 16 }}>Emocional</h3>
-      <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, opacity: 0.85 }}>{JSON.stringify(emo, null, 2)}</pre>
-    </Card>
+      <Card>
+        <h3 style={{ marginTop: 0 }}>Produtos</h3>
+        <p style={{ opacity: 0.75, marginTop: 6 }}>
+          Em breve você vai ver aqui seus produtos preferidos e adquiridos. (MVP)
+        </p>
+
+        <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+          <div style={{ padding: 14, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff" }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>Preferidos</div>
+            {favorites.length === 0 ? (
+              <div style={{ opacity: 0.75, fontSize: 13 }}>Nenhum produto marcado como preferido ainda.</div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {favorites.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div style={{ padding: 14, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff" }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>Adquiridos</div>
+            {purchased.length === 0 ? (
+              <div style={{ opacity: 0.75, fontSize: 13 }}>Nenhuma compra registrada ainda.</div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {purchased.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+          <button type="button" style={styles.btn} onClick={() => nav("/app/produtos")}>Ir para Produtos</button>
+          <button type="button" style={styles.btnGhost} onClick={() => nav("/app/pagamentos")}>Ir para Pagamentos</button>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -2100,13 +2493,15 @@ function RequireProfileComplete({ session, profile, loadingProfile, profileError
   }
 
   // Enquanto está carregando, mostra loading
-  if (loadingProfile || !profile) {
+  if (loadingProfile) {
     return (
       <Card>
         <div style={{ opacity: 0.75 }}>Carregando...</div>
       </Card>
     );
   }
+
+  if (!profile) return <Navigate to="/perfil-clinico" replace />;
 
   if (!isPersonalComplete(profile)) return <Navigate to="/perfil-clinico" replace />;
   if (!isWizardComplete(profile)) return <Navigate to="/wizard" replace />;
@@ -2131,49 +2526,51 @@ export default function App() {
 
   // evita corrida de requests quando auth muda
   const fetchSeqRef = useRef(0);
-  const lastLoadedUserIdRef = useRef(null);
-  const inFlightProfileRef = useRef(null);
-  // Segurança extra para evitar múltiplos signout simultâneos
-  const signingOutRef = useRef(false);
   const [signingOut, setSigningOut] = useState(false);
 
-  async function loadProfileFor(userId) {
-    if (!userId) return;
-
-    // evita refetch desnecessário
-    if (lastLoadedUserIdRef.current === userId && profile && !profileError) {
-      return;
-    }
-
-    // se já existe um fetch em andamento para o mesmo user, reutiliza
-    if (inFlightProfileRef.current?.userId === userId && inFlightProfileRef.current?.promise) {
-      return inFlightProfileRef.current.promise;
-    }
-
+  async function loadProfile(userId) {
     const seq = ++fetchSeqRef.current;
+
     setLoadingProfile(true);
     setProfileError(null);
 
-    const promise = (async () => {
-      try {
-        const p = await fetchMyProfile(userId);
-        if (seq !== fetchSeqRef.current) return;
-        setProfile(p);
-        lastLoadedUserIdRef.current = userId;
-      } catch (err) {
-        if (seq !== fetchSeqRef.current) return;
-        setProfile(null);
-        setProfileError(err);
-      } finally {
-        if (seq !== fetchSeqRef.current) return;
-        setLoadingProfile(false);
-        // limpa in-flight
-        if (inFlightProfileRef.current?.userId === userId) inFlightProfileRef.current = null;
-      }
-    })();
+    try {
+      // 2 tentativas, com timeout de 12s cada
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        if (fetchSeqRef.current !== seq) return; // cancelado por outro fetch
 
-    inFlightProfileRef.current = { userId, promise };
-    return promise;
+        try {
+          const query = supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+          const { data, error } = await withTimeout(query, 12000, "Supabase timeout ao buscar perfil");
+
+          if (error) throw error;
+
+          // só atualiza se ainda for o fetch atual
+          if (fetchSeqRef.current === seq) {
+            setProfile(data || null);
+            setLoadingProfile(false);
+          }
+          return;
+        } catch (err) {
+          const msg = String(err?.message || err);
+          const isTimeoutOrNetwork =
+            msg.toLowerCase().includes("timeout") ||
+            msg.toLowerCase().includes("failed to fetch") ||
+            msg.toLowerCase().includes("network");
+
+          if (!isTimeoutOrNetwork || attempt === 2) throw err;
+
+          // backoff leve antes da segunda tentativa
+          await sleep(600);
+        }
+      }
+    } catch (err) {
+      if (fetchSeqRef.current !== seq) return;
+
+      setProfile(null);
+      setProfileError(err?.message || "Não consegui carregar seu perfil");
+      setLoadingProfile(false);
+    }
   }
 
   async function loadAdminFor(userId, sess) {
@@ -2189,6 +2586,22 @@ export default function App() {
   }
 
   useEffect(() => {
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      // se não tem sessão, garante estado limpo
+      fetchSeqRef.current++;
+      setProfile(null);
+      setProfileError(null);
+      setLoadingProfile(false);
+      return;
+    }
+
+    loadProfile(userId);
+    // IMPORTANTE: dependências só de userId (não coloca profile aqui)
+  }, [session?.user?.id]);
+
+  useEffect(() => {
     let unsub = null;
 
     (async () => {
@@ -2199,21 +2612,12 @@ export default function App() {
         setAuthChecked(true);
 
         if (sess?.user?.id) {
-          await loadProfileFor(sess.user.id);
           await loadAdminFor(sess.user.id, sess);
         } else {
-          lastLoadedUserIdRef.current = null;
-          inFlightProfileRef.current = null;
-          setProfile(null);
-          setProfileError(null);
-          setLoadingProfile(false);
           setIsAdminFlag(false);
         }
       } catch (err) {
         setSession(null);
-        setProfile(null);
-        setProfileError(err);
-        setLoadingProfile(false);
         setIsAdminFlag(false);
         setAuthChecked(true);
       }
@@ -2231,18 +2635,9 @@ export default function App() {
       const newUserId = newSession?.user?.id || null;
 
       if (newUserId) {
-        // só recarrega se mudou de usuário
-        if (lastLoadedUserIdRef.current !== newUserId) {
-          await loadProfileFor(newUserId);
-        }
         await loadAdminFor(newUserId, newSession);
       } else {
         fetchSeqRef.current++;
-        lastLoadedUserIdRef.current = null;
-        inFlightProfileRef.current = null;
-        setProfile(null);
-        setProfileError(null);
-        setLoadingProfile(false);
         setIsAdminFlag(false);
       }
     });
@@ -2251,15 +2646,13 @@ export default function App() {
 
     return () => {
       fetchSeqRef.current++;
-      lastLoadedUserIdRef.current = null;
-      inFlightProfileRef.current = null;
       unsub?.unsubscribe?.();
     };
   }, []);
 
   async function handleSignOut() {
-    if (signingOutRef.current) return;
-    signingOutRef.current = true;
+    const seq = ++fetchSeqRef.current; // cancela qualquer fetch em andamento
+
     setSigningOut(true);
 
     try {
@@ -2268,22 +2661,17 @@ export default function App() {
     } catch (e) {
       // Mesmo com falha de rede, vamos limpar o estado local
     } finally {
-      // invalida qualquer fetch em andamento
-      fetchSeqRef.current++;
+      // se outro signout/fetch começou, não precisa insistir
+      if (fetchSeqRef.current !== seq) return;
 
-      // limpa estados locais
       setSession(null);
       setProfile(null);
       setProfileError(null);
       setLoadingProfile(false);
       setIsAdminFlag(false);
-
-      // navega para auth fora da árvore protegida
-      nav("/auth", { replace: true });
-
-      signingOutRef.current = false;
       setSigningOut(false);
-      setAuthChecked(true);
+
+      nav("/auth", { replace: true });
     }
   }
 
@@ -2299,6 +2687,54 @@ export default function App() {
       </div>
     );
   }
+
+  if (!session?.user) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.container}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/auth" replace />} />
+            <Route path="/auth" element={<Welcome />} />
+            <Route path="/criar-conta" element={<Signup />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="*" element={<Navigate to="/auth" replace />} />
+          </Routes>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadingProfile) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.container}>
+          <Card>Carregando...</Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.container}>
+          <Card>
+            <h3 style={{ marginTop: 0 }}>Não consegui carregar seu perfil</h3>
+            <p style={{ opacity: 0.8 }}>{String(profileError?.message || profileError)}</p>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <button type="button" style={styles.btn} onClick={() => loadProfile(session.user.id)}>
+                Tentar novamente
+              </button>
+              <button type="button" style={styles.btnGhost} onClick={() => nav("/auth", { replace: true })}>
+                Ir para login
+              </button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Shell session={session} onSignOut={handleSignOut} signingOut={signingOut}>
       <Routes>
@@ -2312,7 +2748,7 @@ export default function App() {
           path="/start"
           element={
             <RequireAuth session={session}>
-              <StartGate profile={profile} loadingProfile={loadingProfile} profileError={profileError} />
+              <ProfileGate session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError} />
             </RequireAuth>
           }
         />
@@ -2366,6 +2802,20 @@ export default function App() {
           element={
             <RequireProfileComplete session={session} profile={profile} loadingProfile={loadingProfile} profileError={profileError}>
               <Produtos />
+            </RequireProfileComplete>
+          }
+        />
+
+        <Route
+          path="/app/pagamentos"
+          element={
+            <RequireProfileComplete
+              session={session}
+              profile={profile}
+              loadingProfile={loadingProfile}
+              profileError={profileError}
+            >
+              <Pagamentos />
             </RequireProfileComplete>
           }
         />
@@ -2459,6 +2909,24 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  appHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  },
+  appLogo: {
+    width: 36,
+    height: 36,
+  },
+  appTitle: {
+    fontSize: 18,
+    fontWeight: 600,
+    lineHeight: "20px",
+  },
+  appSubtitle: {
+    fontSize: 12,
+    opacity: 0.7,
   },
   logoDot: { width: 18, height: 18, borderRadius: 6, background: "#2e7d32" },
   container: { maxWidth: 920, margin: "0 auto", padding: "22px 16px 40px" },
