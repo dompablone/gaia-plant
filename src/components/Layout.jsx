@@ -1,54 +1,86 @@
-import React from "react";
-import { Outlet, Link, useNavigate } from "react-router-dom";
-import gaiaIcon from "../assets/gaia-icon.png";
+import { Outlet, Link } from "react-router-dom";
+import gaiaLogo from "../assets/gaia-icon.png";
 
-export default function Layout({ session, onSignOut, signingOut }) {
-  const nav = useNavigate();
-  const email = session?.user?.email ?? "";
-
+export default function Layout({ onSignOut }) {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+    <div>
+      <nav
+        style={{
+          padding: 16,
+          borderBottom: "1px solid #ddd",
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <div />
+
+        <Link
+          to="/app"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            textDecoration: "none",
+            justifySelf: "center",
+          }}
+        >
+          <img src={gaiaLogo} alt="Gaia Plant" style={{ width: 108, height: 108 }} />
+          <span style={{ fontWeight: 700, color: "#2e7d32", fontSize: 48 }}>Gaia Plant</span>
+        </Link>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, justifySelf: "end" }}>
+          <Link
+            to="/app/carrinho"
+            style={{
+              textDecoration: "none",
+              padding: "10px 14px",
+              borderRadius: 999,
+              border: "1px solid #7fb069",
+              color: "#2f5d36",
+              fontWeight: 700,
+              background: "#fff",
+              boxShadow: "0 6px 16px rgba(127, 176, 105, 0.18)",
+            }}
+          >
+            🛒 Carrinho
+          </Link>
+          <Link
+            to="/perfil-clinico"
+            style={{
+              textDecoration: "none",
+              padding: "10px 14px",
+              borderRadius: 999,
+              border: "1px solid #7fb069",
+              color: "#2f5d36",
+              fontWeight: 700,
+              background: "#fff",
+              boxShadow: "0 6px 16px rgba(127, 176, 105, 0.18)",
+            }}
+          >
+            Meu perfil
+          </Link>
           <button
             type="button"
-            onClick={() => nav("/app")}
-            className="flex items-center gap-3"
+            onClick={onSignOut}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 999,
+              border: "1px solid #7fb069",
+              color: "#2f5d36",
+              fontWeight: 700,
+              background: "#fff",
+              boxShadow: "0 6px 16px rgba(127, 176, 105, 0.18)",
+              cursor: "pointer",
+            }}
           >
-            <img src={gaiaIcon} alt="Gaia Plant" className="h-10 w-10" />
-            <div className="text-left leading-tight">
-              <div className="font-extrabold">Gaia Plant</div>
-              <div className="text-xs text-slate-500">Cannabis Medicinal</div>
-            </div>
+            Sair
           </button>
-
-          {email ? (
-            <div className="flex items-center gap-2">
-              <span className="hidden text-xs text-slate-500 sm:inline">{email}</span>
-
-              <Link
-                to="/app/pagamentos"
-                className="inline-flex h-9 w-10 items-center justify-center rounded-full border bg-white hover:bg-slate-50"
-                title="Pagamentos"
-                aria-label="Pagamentos"
-              >
-                🛒
-              </Link>
-
-              <button
-                type="button"
-                onClick={onSignOut}
-                disabled={Boolean(signingOut)}
-                className="rounded-full border px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
-              >
-                {signingOut ? "Saindo..." : "Sair"}
-              </button>
-            </div>
-          ) : null}
         </div>
-      </div>
+      </nav>
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main style={{ padding: 16 }}>
         <Outlet />
       </main>
     </div>
